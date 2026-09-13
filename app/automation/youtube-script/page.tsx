@@ -55,11 +55,7 @@ export default function YoutubeScriptPage() {
 
   const finalScript =
     result && selectedIntro !== null
-      ? [
-          result.introOptions[selectedIntro].text,
-          result.body,
-          result.actionCta,
-        ]
+      ? [result.introOptions[selectedIntro].text, result.body, result.actionCta]
           .filter(Boolean)
           .join("\n\n")
       : "";
@@ -71,79 +67,110 @@ export default function YoutubeScriptPage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl">
-      <h1 className="mb-1 text-2xl font-bold">유튜브 원고 자동화</h1>
-      <p className="mb-6 text-neutral-500">
-        주제를 입력하면 도입부 후보 3개 + 본문 초안을 생성합니다.
-      </p>
-
-      <div className="mb-6 rounded-lg border border-neutral-200 bg-white p-5">
-        <label className="mb-1 block text-sm font-medium">주제</label>
-        <input
-          className="mb-4 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
-          placeholder="예: 아이패드 200% 활용법"
-          value={topic}
-          onChange={(e) => setTopic(e.target.value)}
-        />
-        <label className="mb-1 block text-sm font-medium">참고 자료/메모 (선택)</label>
-        <textarea
-          className="mb-4 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
-          rows={4}
-          placeholder="영상에 꼭 들어갔으면 하는 정보, 개인 경험, 근거 자료 등을 적어주세요."
-          value={notes}
-          onChange={(e) => setNotes(e.target.value)}
-        />
-        <button
-          onClick={handleGenerate}
-          disabled={loading}
-          className="rounded-md bg-neutral-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
-        >
-          {loading ? "생성 중..." : "원고 생성"}
-        </button>
-        {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
-      </div>
+    <div className="mx-auto flex max-w-4xl flex-col gap-5">
+      <section className="card">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-sm font-semibold">원고 생성</h2>
+          <span className="rounded-full bg-muted px-2.5 py-0.5 text-[11px] font-semibold text-muted-fg">
+            Claude API
+          </span>
+        </div>
+        <div className="grid gap-4 md:grid-cols-2">
+          <div>
+            <label htmlFor="topic" className="mb-1.5 block text-[12.5px] font-semibold">
+              주제
+            </label>
+            <input
+              id="topic"
+              className="field"
+              placeholder="예: 돈 안 쓰고 집 비싸 보이게 만드는 법"
+              value={topic}
+              onChange={(e) => setTopic(e.target.value)}
+            />
+            <p className="mt-1.5 text-[11.5px] text-muted-fg">썸네일·제목에 쓸 한 줄 주제를 적습니다.</p>
+          </div>
+          <div>
+            <label htmlFor="notes" className="mb-1.5 block text-[12.5px] font-semibold">
+              참고 자료 / 메모 (선택)
+            </label>
+            <textarea
+              id="notes"
+              className="field"
+              rows={3}
+              placeholder="영상에 꼭 들어갔으면 하는 정보, 개인 경험, 근거 자료"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+            />
+          </div>
+        </div>
+        <div className="mt-4 flex gap-2">
+          <button
+            onClick={handleGenerate}
+            disabled={loading}
+            className="cursor-pointer rounded-lg bg-accent px-4 py-2 text-[13px] font-semibold text-on-accent transition-[filter] hover:brightness-110 disabled:opacity-50"
+          >
+            {loading ? "생성 중..." : "원고 생성"}
+          </button>
+          <button
+            onClick={() => {
+              setTopic("");
+              setNotes("");
+              setResult(null);
+              setError(null);
+            }}
+            className="cursor-pointer rounded-lg border border-border-strong px-4 py-2 text-[13px] font-medium transition-colors hover:bg-muted"
+          >
+            초기화
+          </button>
+        </div>
+        {error && <p className="mt-3 text-[13px] text-danger">{error}</p>}
+      </section>
 
       {result && (
-        <div className="mb-6">
-          <h2 className="mb-2 text-lg font-semibold">도입부 후보 (하나를 선택하세요)</h2>
-          <div className="grid gap-3">
+        <section className="card">
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="text-sm font-semibold">도입부 후보 — 하나를 고르세요</h2>
+            <span className="rounded-full bg-muted px-2.5 py-0.5 text-[11px] font-semibold text-muted-fg">
+              템플릿 30종 기반
+            </span>
+          </div>
+          <div className="grid gap-2.5">
             {result.introOptions.map((option, i) => (
               <button
                 key={i}
                 onClick={() => setSelectedIntro(i)}
-                className={`rounded-lg border p-4 text-left text-sm ${
+                aria-pressed={selectedIntro === i}
+                className={`cursor-pointer rounded-[10px] border bg-bg p-3 text-left transition-colors ${
                   selectedIntro === i
-                    ? "border-neutral-900 bg-neutral-50"
-                    : "border-neutral-200 bg-white hover:border-neutral-400"
+                    ? "border-accent"
+                    : "border-border-strong hover:border-muted-fg"
                 }`}
               >
-                <div className="mb-1 text-xs font-medium text-neutral-500">
+                <div className="mb-1.5 text-[11px] font-semibold text-accent">
                   템플릿 {option.templateNumber} · {option.reason}
                 </div>
-                <div>{option.text}</div>
+                <p className="text-[13px] leading-relaxed">{option.text}</p>
               </button>
             ))}
           </div>
-        </div>
+        </section>
       )}
 
       {result && selectedIntro !== null && (
-        <div className="rounded-lg border border-neutral-200 bg-white p-5">
+        <section className="card">
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-lg font-semibold">완성 원고</h2>
+            <h2 className="text-sm font-semibold">완성 원고</h2>
             <button
               onClick={handleCopy}
-              className="rounded-md border border-neutral-300 px-3 py-1.5 text-sm"
+              className="cursor-pointer rounded-lg border border-border-strong px-3 py-1.5 text-[13px] font-medium transition-colors hover:bg-muted"
             >
               {copied ? "복사됨!" : "복사"}
             </button>
           </div>
-          <textarea
-            readOnly
-            className="h-96 w-full whitespace-pre-wrap rounded-md border border-neutral-200 bg-neutral-50 p-3 text-sm"
-            value={finalScript}
-          />
-        </div>
+          <div className="max-h-96 overflow-auto whitespace-pre-wrap rounded-lg border border-border bg-bg p-4 text-[13px] leading-[1.8]">
+            {finalScript}
+          </div>
+        </section>
       )}
     </div>
   );
