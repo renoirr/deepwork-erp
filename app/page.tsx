@@ -4,7 +4,7 @@ import { NAV } from "@/components/nav";
 const READY = new Set(["/automation/youtube-script"]);
 
 const DESCRIPTIONS: Record<string, string> = {
-  "/automation/youtube-script": "Claude Code 세션에서 작성 — 적용되는 원고 규칙 보기",
+  "/automation/youtube-script": "주제 입력 → 도입부 후보 3개 → 공감·정보·개인가치·질문 구조의 원고 초안",
   "/automation/image": "1000×1000 규격 이미지 자동 생성 (Google Gemini)",
   "/automation/detail-page": "제품 자료 → 섹션 구성 → 카피 초안",
   "/sales": "스마트스토어 주문·정산을 스프레드시트에 모아 매일 18시 자동 갱신",
