@@ -1,55 +1,76 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { callBackend } from "@/lib/backend";
 
-type IntroOption = {
-  templateNumber: number;
-  reason: string;
-  text: string;
+type IntroOption = { templateNumber: number; reason: string; text: string };
+
+type Job = {
+  id: string;
+  status: "대기" | "작업중" | "완료";
+  introOptions?: IntroOption[];
+  body?: string;
+  actionCta?: string;
 };
 
-type ScriptResult = {
-  introOptions: IntroOption[];
-  body: string;
-  actionCta: string;
+const STATUS_TEXT: Record<Job["status"], string> = {
+  대기: "요청이 등록됐습니다. Claude Code 세션이 가져가기를 기다리는 중…",
+  작업중: "원고를 쓰고 있습니다…",
+  완료: "완료",
 };
 
 export default function YoutubeScriptPage() {
   const [topic, setTopic] = useState("");
   const [notes, setNotes] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<ScriptResult | null>(null);
-  const [selectedIntro, setSelectedIntro] = useState<number | null>(null);
+  const [job, setJob] = useState<Job | null>(null);
+  const [selectedIntro, setSelectedIntro] = useState(0);
   const [copied, setCopied] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  async function handleGenerate() {
+  // 완료될 때까지 3초마다 상태를 확인한다.
+  useEffect(() => {
+    if (!job || job.status === "완료") return;
+
+    timer.current = setTimeout(async () => {
+      try {
+        const next = await callBackend<Job>("getJob", { id: job.id });
+        setJob(next);
+      } catch {
+        // 일시적인 실패는 무시하고 다음 주기에 다시 확인한다.
+      }
+    }, 3000);
+
+    return () => {
+      if (timer.current) clearTimeout(timer.current);
+    };
+  }, [job]);
+
+  async function handleSubmit() {
     if (!topic.trim()) {
       setError("주제를 입력해주세요.");
       return;
     }
-    setLoading(true);
+    setSending(true);
     setError(null);
-    setResult(null);
-    setSelectedIntro(null);
+    setJob(null);
+    setSelectedIntro(0);
 
     try {
-      const data = await callBackend<ScriptResult>("generateScript", { topic, notes });
-      setResult(data);
-      setSelectedIntro(0);
+      const created = await callBackend<Job>("enqueue", { topic, notes });
+      setJob({ ...created, status: "대기" });
     } catch (e) {
-      setError(e instanceof Error ? e.message : "원고 생성에 실패했습니다.");
+      setError(e instanceof Error ? e.message : "요청 등록에 실패했습니다.");
     } finally {
-      setLoading(false);
+      setSending(false);
     }
   }
 
+  const intros = job?.introOptions ?? [];
   const finalScript =
-    result && selectedIntro !== null
-      ? [result.introOptions[selectedIntro].text, result.body, result.actionCta]
-          .filter(Boolean)
-          .join("\n\n")
+    job?.status === "완료" && intros[selectedIntro]
+      ? [intros[selectedIntro].text, job.body, job.actionCta].filter(Boolean).join("\n\n")
       : "";
 
   async function handleCopy() {
@@ -62,9 +83,9 @@ export default function YoutubeScriptPage() {
     <div className="mx-auto flex max-w-4xl flex-col gap-5">
       <section className="card">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-semibold">원고 생성</h2>
+          <h2 className="text-sm font-semibold">원고 요청</h2>
           <span className="rounded-full bg-muted px-2.5 py-0.5 text-[11px] font-semibold text-muted-fg">
-            Claude API
+            Claude Code 세션이 작성
           </span>
         </div>
         <div className="grid gap-4 md:grid-cols-2">
@@ -75,11 +96,10 @@ export default function YoutubeScriptPage() {
             <input
               id="topic"
               className="field"
-              placeholder="예: 돈 안 쓰고 집 비싸 보이게 만드는 법"
+              placeholder="예: 공부의자 3개 비교"
               value={topic}
               onChange={(e) => setTopic(e.target.value)}
             />
-            <p className="mt-1.5 text-[11.5px] text-muted-fg">썸네일·제목에 쓸 한 줄 주제를 적습니다.</p>
           </div>
           <div>
             <label htmlFor="notes" className="mb-1.5 block text-[12.5px] font-semibold">
@@ -89,36 +109,38 @@ export default function YoutubeScriptPage() {
               id="notes"
               className="field"
               rows={3}
-              placeholder="영상에 꼭 들어갔으면 하는 정보, 개인 경험, 근거 자료"
+              placeholder="가격·치수처럼 원고에 꼭 들어가야 할 수치를 적어주세요. 없으면 비워둔 채로 옵니다."
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
             />
           </div>
         </div>
-        <div className="mt-4 flex gap-2">
+        <div className="mt-4 flex items-center gap-2">
           <button
-            onClick={handleGenerate}
-            disabled={loading}
+            onClick={handleSubmit}
+            disabled={sending}
             className="cursor-pointer rounded-lg bg-accent px-4 py-2 text-[13px] font-semibold text-on-accent transition-[filter] hover:brightness-110 disabled:opacity-50"
           >
-            {loading ? "생성 중..." : "원고 생성"}
+            {sending ? "등록 중..." : "원고 요청"}
           </button>
-          <button
-            onClick={() => {
-              setTopic("");
-              setNotes("");
-              setResult(null);
-              setError(null);
-            }}
-            className="cursor-pointer rounded-lg border border-border-strong px-4 py-2 text-[13px] font-medium transition-colors hover:bg-muted"
-          >
-            초기화
-          </button>
+          <span className="text-[11.5px] text-muted-fg">
+            터미널의 Claude Code 세션이 켜져 있어야 작성됩니다.
+          </span>
         </div>
         {error && <p className="mt-3 text-[13px] text-danger">{error}</p>}
       </section>
 
-      {result && (
+      {job && job.status !== "완료" && (
+        <section className="card flex items-center gap-3">
+          <span className="h-2 w-2 animate-pulse rounded-full bg-accent" />
+          <div>
+            <p className="text-[13px]">{STATUS_TEXT[job.status]}</p>
+            <p className="mt-0.5 text-[11.5px] text-muted-fg">요청번호 {job.id}</p>
+          </div>
+        </section>
+      )}
+
+      {job?.status === "완료" && intros.length > 0 && (
         <section className="card">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-sm font-semibold">도입부 후보 — 하나를 고르세요</h2>
@@ -127,15 +149,13 @@ export default function YoutubeScriptPage() {
             </span>
           </div>
           <div className="grid gap-2.5">
-            {result.introOptions.map((option, i) => (
+            {intros.map((option, i) => (
               <button
                 key={i}
                 onClick={() => setSelectedIntro(i)}
                 aria-pressed={selectedIntro === i}
                 className={`cursor-pointer rounded-[10px] border bg-bg p-3 text-left transition-colors ${
-                  selectedIntro === i
-                    ? "border-accent"
-                    : "border-border-strong hover:border-muted-fg"
+                  selectedIntro === i ? "border-accent" : "border-border-strong hover:border-muted-fg"
                 }`}
               >
                 <div className="mb-1.5 text-[11px] font-semibold text-accent">
@@ -148,7 +168,7 @@ export default function YoutubeScriptPage() {
         </section>
       )}
 
-      {result && selectedIntro !== null && (
+      {finalScript && (
         <section className="card">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-sm font-semibold">완성 원고</h2>

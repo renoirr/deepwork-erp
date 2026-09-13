@@ -1,15 +1,21 @@
 // 딥워크 ERP 백엔드 (Google Apps Script 웹앱)
 //
-// 이 파일과 Prompt.gs를 앱스크립트 편집기에 붙여넣고 "배포 > 새 배포 > 웹 앱"으로 배포합니다.
-//   - 실행 계정: 나
-//   - 액세스 권한: 모든 사용자
-// 배포 후 나오는 /exec 주소를 GitHub 저장소의 APPS_SCRIPT_URL 시크릿에 넣습니다.
+// 원고는 Claude API가 아니라 선생님의 Claude Code 세션이 씁니다.
+// 이 스크립트는 그 사이의 "주문서 통"만 담당합니다.
+//   ERP 화면 → enqueue(대기) → Claude Code가 listPending으로 가져가 작성 → submitResult(완료) → ERP가 getJob으로 표시
 //
-// API 키는 코드에 적지 말고 [프로젝트 설정 > 스크립트 속성]에 저장합니다.
-//   ANTHROPIC_API_KEY : 원고 생성용
-//   APP_TOKEN         : 화면에서 보내는 값과 대조하는 공용 토큰 (아무 문자열)
+// 배포: 배포 > 새 배포 > 웹 앱 (실행: 나 / 액세스: 모든 사용자)
+// 스크립트 속성: APP_TOKEN (화면·세션과 맞추는 공용 토큰)
 
-var ANTHROPIC_MODEL = "claude-sonnet-5";
+var SHEET_NAME = "원고요청";
+var HEADERS = ["id", "등록시각", "주제", "참고자료", "상태", "도입부후보", "본문", "행동제안", "완료시각"];
+var COL = { id: 1, at: 2, topic: 3, notes: 4, status: 5, intros: 6, body: 7, cta: 8, doneAt: 9 };
+
+// 최초 1회 편집기에서 실행해 시트 접근 권한을 승인하고 "원고요청" 시트를 만든다.
+function setup() {
+  var sh = sheet_();
+  Logger.log("준비 완료: " + sh.getName() + " (행 " + sh.getLastRow() + ")");
+}
 
 function doPost(e) {
   var out;
@@ -18,8 +24,14 @@ function doPost(e) {
     var expected = prop_("APP_TOKEN");
     if (expected && req.token !== expected) {
       out = { error: "토큰이 올바르지 않습니다." };
-    } else if (req.action === "generateScript") {
-      out = generateScript_(req);
+    } else if (req.action === "enqueue") {
+      out = enqueue_(req);
+    } else if (req.action === "getJob") {
+      out = getJob_(req);
+    } else if (req.action === "listPending") {
+      out = listPending_();
+    } else if (req.action === "submitResult") {
+      out = submitResult_(req);
     } else if (req.action === "ping") {
       out = { ok: true };
     } else {
@@ -37,40 +49,79 @@ function prop_(name) {
   return PropertiesService.getScriptProperties().getProperty(name);
 }
 
-function generateScript_(req) {
-  var key = prop_("ANTHROPIC_API_KEY");
-  if (!key) return { error: "스크립트 속성에 ANTHROPIC_API_KEY가 없습니다." };
+function sheet_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sh = ss.getSheetByName(SHEET_NAME);
+  if (!sh) {
+    sh = ss.insertSheet(SHEET_NAME);
+    sh.appendRow(HEADERS);
+    sh.setFrozenRows(1);
+    sh.setColumnWidth(COL.topic, 320);
+  }
+  return sh;
+}
 
+function findRow_(sh, id) {
+  var ids = sh.getRange(2, COL.id, Math.max(sh.getLastRow() - 1, 1), 1).getValues();
+  for (var i = 0; i < ids.length; i++) {
+    if (String(ids[i][0]) === String(id)) return i + 2;
+  }
+  return 0;
+}
+
+function enqueue_(req) {
   var topic = (req.topic || "").trim();
   if (!topic) return { error: "주제를 입력해주세요." };
 
-  var notes = (req.notes || "").trim();
-  var userMessage = notes
-    ? "주제: " + topic + "\n\n참고 자료/메모:\n" + notes
-    : "주제: " + topic;
+  var id = "J" + Date.now();
+  sheet_().appendRow([id, new Date(), topic, (req.notes || "").trim(), "대기", "", "", "", ""]);
+  return { id: id, status: "대기" };
+}
 
-  var res = UrlFetchApp.fetch("https://api.anthropic.com/v1/messages", {
-    method: "post",
-    contentType: "application/json",
-    headers: { "x-api-key": key, "anthropic-version": "2023-06-01" },
-    muteHttpExceptions: true,
-    payload: JSON.stringify({
-      model: ANTHROPIC_MODEL,
-      max_tokens: 8000,
-      system: YOUTUBE_SCRIPT_SYSTEM_PROMPT,
-      tools: [YOUTUBE_SCRIPT_TOOL],
-      tool_choice: { type: "tool", name: YOUTUBE_SCRIPT_TOOL.name },
-      messages: [{ role: "user", content: userMessage }],
-    }),
-  });
+function getJob_(req) {
+  var sh = sheet_();
+  var row = findRow_(sh, req.id);
+  if (!row) return { error: "요청을 찾을 수 없습니다." };
 
-  if (res.getResponseCode() !== 200) {
-    return { error: "Claude API 오류 (" + res.getResponseCode() + "): " + res.getContentText().slice(0, 300) };
+  var v = sh.getRange(row, 1, 1, HEADERS.length).getValues()[0];
+  var job = { id: v[0], topic: v[2], notes: v[3], status: v[4] };
+  if (job.status === "완료") {
+    job.introOptions = v[5] ? JSON.parse(v[5]) : [];
+    job.body = v[6];
+    job.actionCta = v[7];
+  }
+  return job;
+}
+
+// Claude Code 세션이 가져갈 대기/작업중 목록
+function listPending_() {
+  var sh = sheet_();
+  if (sh.getLastRow() < 2) return { jobs: [] };
+
+  var rows = sh.getRange(2, 1, sh.getLastRow() - 1, HEADERS.length).getValues();
+  var jobs = [];
+  for (var i = 0; i < rows.length; i++) {
+    if (rows[i][4] === "대기") {
+      jobs.push({ id: rows[i][0], topic: rows[i][2], notes: rows[i][3] });
+    }
+  }
+  return { jobs: jobs };
+}
+
+function submitResult_(req) {
+  var sh = sheet_();
+  var row = findRow_(sh, req.id);
+  if (!row) return { error: "요청을 찾을 수 없습니다." };
+
+  if (req.status === "작업중") {
+    sh.getRange(row, COL.status).setValue("작업중");
+    return { ok: true, status: "작업중" };
   }
 
-  var blocks = JSON.parse(res.getContentText()).content || [];
-  for (var i = 0; i < blocks.length; i++) {
-    if (blocks[i].type === "tool_use") return blocks[i].input;
-  }
-  return { error: "AI 응답에서 원고를 추출하지 못했습니다." };
+  sh.getRange(row, COL.intros).setValue(JSON.stringify(req.introOptions || []));
+  sh.getRange(row, COL.body).setValue(req.body || "");
+  sh.getRange(row, COL.cta).setValue(req.actionCta || "");
+  sh.getRange(row, COL.status).setValue("완료");
+  sh.getRange(row, COL.doneAt).setValue(new Date());
+  return { ok: true, status: "완료" };
 }
