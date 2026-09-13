@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { NAV, type NavEntry } from "./nav";
+import { NAV, normalize, type NavEntry } from "./nav";
 
 const ICONS: Record<NavEntry["icon"], React.ReactNode> = {
   home: <><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><path d="M9 22V12h6v10" /></>,
@@ -15,7 +15,7 @@ const ICONS: Record<NavEntry["icon"], React.ReactNode> = {
 };
 
 export default function Sidebar() {
-  const pathname = usePathname();
+  const pathname = normalize(usePathname());
   const groups = NAV.filter((n) => n.group !== "딥워크 ERP");
   const groupNames = [...new Set(groups.map((g) => g.group))];
   const home = NAV[0];

@@ -5,6 +5,9 @@ export type NavEntry = {
   icon: "home" | "file" | "image" | "layout" | "chart" | "target" | "check";
 };
 
+// trailingSlash 설정 때문에 usePathname()이 "/sales/"처럼 돌아온다.
+export const normalize = (p: string) => (p.length > 1 ? p.replace(/\/$/, "") : p);
+
 export const NAV: NavEntry[] = [
   { href: "/", label: "홈", group: "딥워크 ERP", icon: "home" },
   { href: "/automation/youtube-script", label: "유튜브 원고", group: "업무 자동화툴", icon: "file" },

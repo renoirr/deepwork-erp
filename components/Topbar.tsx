@@ -1,11 +1,11 @@
 "use client";
 
 import { usePathname } from "next/navigation";
-import { NAV } from "./nav";
+import { NAV, normalize } from "./nav";
 import ThemeToggle from "./ThemeToggle";
 
 export default function Topbar() {
-  const pathname = usePathname();
+  const pathname = normalize(usePathname());
   const current = NAV.find((n) => n.href === pathname) ?? NAV[0];
 
   return (

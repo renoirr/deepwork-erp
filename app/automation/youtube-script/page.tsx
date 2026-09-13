@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { callBackend } from "@/lib/backend";
 
 type IntroOption = {
   templateNumber: number;
@@ -34,20 +35,11 @@ export default function YoutubeScriptPage() {
     setSelectedIntro(null);
 
     try {
-      const res = await fetch("/api/generate-script", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ topic, notes }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error ?? "원고 생성에 실패했습니다.");
-        return;
-      }
+      const data = await callBackend<ScriptResult>("generateScript", { topic, notes });
       setResult(data);
       setSelectedIntro(0);
-    } catch {
-      setError("네트워크 오류로 원고 생성에 실패했습니다.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "원고 생성에 실패했습니다.");
     } finally {
       setLoading(false);
     }

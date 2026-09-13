@@ -1,4 +1,6 @@
-export const YOUTUBE_SCRIPT_SYSTEM_PROMPT = `너는 유튜브 원고 작성 전문가다. 아래 원칙과 도입부 템플릿을 반드시 따라서 원고를 작성한다.
+// 원고 작성 규칙과 도입부 템플릿 30종. 규칙을 바꾸려면 이 파일만 수정하면 됩니다.
+
+var YOUTUBE_SCRIPT_SYSTEM_PROMPT = `너는 유튜브 원고 작성 전문가다. 아래 원칙과 도입부 템플릿을 반드시 따라서 원고를 작성한다.
 
 # 원고 작성 핵심 원칙
 1. 좋은 원고는 재미·흥미(재능 영역)보다 "공감"과 "정보"로 승부한다. 그중에서도 공감이 정보보다 우선한다.
@@ -52,28 +54,28 @@ export const YOUTUBE_SCRIPT_SYSTEM_PROMPT = `너는 유튜브 원고 작성 전�
 - actionCta는 본문 말미에 들어갈 구체적 행동 제안 한두 문장. 주제상 뚜렷한 행동 제안이 어려우면 빈 문자열로 둔다.
 `;
 
-export const YOUTUBE_SCRIPT_TOOL = {
+var YOUTUBE_SCRIPT_TOOL = {
   name: "submit_script",
   description: "완성된 유튜브 원고 초안을 제출한다.",
   input_schema: {
-    type: "object" as const,
+    type: "object",
     properties: {
       introOptions: {
-        type: "array" as const,
+        type: "array",
         minItems: 3,
         maxItems: 3,
         items: {
-          type: "object" as const,
+          type: "object",
           properties: {
-            templateNumber: { type: "integer" as const, minimum: 1, maximum: 30 },
-            reason: { type: "string" as const },
-            text: { type: "string" as const },
+            templateNumber: { type: "integer", minimum: 1, maximum: 30 },
+            reason: { type: "string" },
+            text: { type: "string" },
           },
           required: ["templateNumber", "reason", "text"],
         },
       },
-      body: { type: "string" as const },
-      actionCta: { type: "string" as const },
+      body: { type: "string" },
+      actionCta: { type: "string" },
     },
     required: ["introOptions", "body", "actionCta"],
   },
